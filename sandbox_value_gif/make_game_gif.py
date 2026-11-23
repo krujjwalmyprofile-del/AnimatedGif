@@ -13,6 +13,11 @@ ORANGE = (255, 110, 50); YELLOW = (255, 210, 60); GREEN = (90, 210, 110)
 RED = (230, 60, 70); BLUE = (80, 150, 255); PINK = (240, 110, 190)
 BRICK = (150, 70, 50); BRICK2 = (110, 50, 40); GRASS = (70, 170, 90)
 GROUND_Y = 320
+LOGO = Image.open(__file__.rsplit("/", 1)[0] + "/sandbox-logo.png").convert("RGBA") if "/" in __file__ else Image.open("sandbox-logo.png").convert("RGBA")
+OVERLAYS = []  # (center_x, center_y, width) in OUTPUT pixels, drawn crisp after upscale
+
+def logo(cx, cy, width):
+    if width > 4: OVERLAYS.append((cx, cy, width))
 
 random.seed(4)
 STARS = [(random.randrange(W), random.randrange(40, 300), random.random() * 6) for _ in range(60)]
@@ -137,7 +142,9 @@ def s_title(img, d, t):
     shadow_txt(img, W // 2, 95, "ANSWER", WHITE, 4)
     shadow_txt(img, W // 2, 140, "vs", ORANGE, 2)
     shadow_txt(img, W // 2, 185, "VALUE", YELLOW, 5)
-    txt(img, W // 2, 232, "A SANDBOX GTME GAME", GREY)
+    k = seg(t, 0.3, 0.7)
+    pop = 1 + 0.12 * math.sin(k * math.pi)
+    logo(W * UP // 2, 507, int(290 * k * pop))
     player(d, W // 2, GROUND_Y - abs(int(math.sin(t * 5) * 6)), t, running=False)
     if int(t * 2.5) % 2 == 0:
         shadow_txt(img, W // 2, 362, "PRESS START", WHITE, 2)
@@ -287,11 +294,12 @@ def s_end(img, d, t):
     if t > 1.9:
         shadow_txt(img, W // 2, 200, "MORE CREATING IT.", WHITE, 2)
     if t > 2.6:
-        box(d, W // 2 - 90, 245, W // 2 + 90, 275, ORANGE, WHITE, 2)
-        txt(img, W // 2, 260, "SANDBOX · GTME", DARK)
-        txt(img, W // 2, 300, "VALUE  10/10", GREEN)
+        k = seg(t, 2.6, 3.0)
+        pop = 1 + 0.12 * math.sin(k * math.pi)
+        logo(W * UP // 2, 530, int(340 * k * pop))
+        txt(img, W // 2, 322, "VALUE  10/10", GREEN)
     if t > 3.0 and int(t * 2.5) % 2 == 0:
-        txt(img, W // 2, 350, "▶ PLAY AGAIN", WHITE)
+        txt(img, W // 2, 362, "▶ PLAY AGAIN", WHITE)
 
 SCENES = [(s_title, 3.0), (s_level1, 7.4), (s_level2, 6.8), (s_level3, 6.2), (s_end, 5.0)]
 
@@ -300,14 +308,20 @@ for fn, dur in SCENES:
     for i in range(int(dur * FPS)):
         t = i / FPS
         img = Image.new("RGB", (W, H), SKY)
+        OVERLAYS.clear()
         fn(img, ImageDraw.Draw(img), t)
         # quick wipe-in at scene start (pixel iris)
         if t < 0.25 and fn is not s_title:
             k = t / 0.25
             ImageDraw.Draw(img).rectangle((0, 0, W, int(H * (1 - k))), fill=DARK)
-        frames.append(img.resize((W * UP, H * UP), Image.NEAREST))
+        big = img.resize((W * UP, H * UP), Image.NEAREST)
+        for (cx, cy, w) in OVERLAYS:
+            h = round(LOGO.height * w / LOGO.width)
+            lg = LOGO.resize((w, h), Image.LANCZOS)
+            big.paste(lg, (cx - w // 2, cy - h // 2), lg)
+        frames.append(big)
 
-pal = [f.convert("P", palette=Image.ADAPTIVE, colors=64, dither=Image.Dither.NONE) for f in frames]
+pal = [f.convert("P", palette=Image.ADAPTIVE, colors=96, dither=Image.Dither.NONE) for f in frames]
 durs = [round(1000 / FPS)] * len(pal)
 pal[0].save("/home/user/AnimatedGif/sandbox_value_gif/answer-vs-value-game.gif", save_all=True,
             append_images=pal[1:], duration=durs, loop=0, optimize=True, disposal=1)
