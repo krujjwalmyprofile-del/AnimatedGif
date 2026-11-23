@@ -14,10 +14,63 @@ RED = (230, 60, 70); BLUE = (80, 150, 255); PINK = (240, 110, 190)
 BRICK = (150, 70, 50); BRICK2 = (110, 50, 40); GRASS = (70, 170, 90)
 GROUND_Y = 320
 LOGO = Image.open(__file__.rsplit("/", 1)[0] + "/sandbox-logo.png").convert("RGBA") if "/" in __file__ else Image.open("sandbox-logo.png").convert("RGBA")
-OVERLAYS = []  # (center_x, center_y, width) in OUTPUT pixels, drawn crisp after upscale
+OVERLAYS = []  # ("img", image, cx, cy, width) / ("cursor", x, y, scale) in OUTPUT pixels
 
-def logo(cx, cy, width):
-    if width > 4: OVERLAYS.append((cx, cy, width))
+from PIL import ImageChops, ImageFilter
+KX0, KY0, KX1, KY1 = 20, 17, 500, 196       # knob box inside the logo image
+TRAVEL = LOGO.width - 23 - 498               # how far the knob slides when pushed
+
+def _pill(size, box, r, ss=4):
+    m = Image.new("L", (size[0] * ss, size[1] * ss), 0)
+    ImageDraw.Draw(m).rounded_rectangle([v * ss for v in box], radius=r * ss, fill=255)
+    return m.resize(size, Image.LANCZOS)
+
+# knob: cut out with its own rounded mask
+_kn = LOGO.crop((KX0, KY0, KX1, KY1))
+_kn.putalpha(ImageChops.multiply(_kn.getchannel("A"),
+             _pill(_kn.size, (3, 2, _kn.width - 3, _kn.height - 1), 82)))
+KNOB = _kn
+# empty track: paint the knob area with a stretched column of bare track
+_tr = LOGO.copy()
+_col = LOGO.crop((520, 0, 521, LOGO.height)).resize((KX1 + 6 - 10, LOGO.height))
+_tr.paste(_col, (10, 0), _col)
+_tr.paste(LOGO.crop((0, 0, 24, LOGO.height)), (0, 0))   # keep the rounded left rim
+_tr.putalpha(LOGO.getchannel("A"))
+TRACK = _tr
+_or = ImageChops.multiply(TRACK.convert("RGB"), Image.new("RGB", TRACK.size, (255, 120, 60)))
+TRACK_ON = _or.convert("RGBA"); TRACK_ON.putalpha(LOGO.getchannel("A"))
+_sh = Image.new("RGBA", KNOB.size, (0, 0, 0, 0))
+ImageDraw.Draw(_sh).rounded_rectangle((6, 14, KNOB.width - 6, KNOB.height + 2), radius=80, fill=(0, 0, 0, 70))
+KNOB_SHADOW = _sh.filter(ImageFilter.GaussianBlur(8))
+
+def toggle_image(k):
+    """k = 0 (off, the original logo) .. 1 (pushed on)."""
+    if k <= 0: return LOGO
+    off = int(TRAVEL * k)
+    im = TRACK.copy()
+    # orange fill grows behind the knob, iOS-switch style
+    fill = Image.new("L", im.size, 0)
+    ImageDraw.Draw(fill).rectangle((0, 0, KX0 + off + KNOB.width - 30, im.height), fill=255)
+    im.paste(TRACK_ON, (0, 0), ImageChops.multiply(fill, LOGO.getchannel("A")))
+    im.alpha_composite(KNOB_SHADOW, (KX0 + off, KY0))
+    im.alpha_composite(KNOB, (KX0 + off, KY0))
+    return im
+
+def logo(cx, cy, width, image=None):
+    if width > 4: OVERLAYS.append(("img", image or LOGO, cx, cy, width))
+
+CURSOR = ["X...........", "XX..........", "XWX.........", "XWWX........", "XWWWX.......",
+          "XWWWWX......", "XWWWWWX.....", "XWWWWWWX....", "XWWWWWWWX...", "XWWWWWWWWX..",
+          "XWWWWWXXXXX.", "XWWXWWX.....", "XWX.XWWX....", "XX..XWWX....", "X....XWWX...",
+          ".....XWWX...", "......XX...."]
+
+def draw_cursor(big, x, y, px):
+    d = ImageDraw.Draw(big)
+    for r, row in enumerate(CURSOR):
+        for c, ch in enumerate(row):
+            if ch in "XW":
+                d.rectangle((x + c * px, y + r * px, x + c * px + px - 1, y + r * px + px - 1),
+                            fill=DARK if ch == "X" else WHITE)
 
 random.seed(4)
 STARS = [(random.randrange(W), random.randrange(40, 300), random.random() * 6) for _ in range(60)]
@@ -136,18 +189,51 @@ def banner(img, d, t, title, sub, dur=1.4):
         txt(img, W // 2, cy + 22, sub, WHITE)
 
 # ------------------------------------------------------------- scenes
+def ease_io(t):
+    t = clamp(t); return t * t * (3 - 2 * t)
+
+T_PRESS, T_SLIDE0, T_SLIDE1 = 1.75, 1.9, 2.55
+
 def s_title(img, d, t):
     background(img, d, t, t * 20)
+    on = ease_io(seg(t, T_SLIDE0, T_SLIDE1))
     hud(img, d, t, 0, lvl=0)
-    shadow_txt(img, W // 2, 95, "ANSWER", WHITE, 4)
-    shadow_txt(img, W // 2, 140, "vs", ORANGE, 2)
-    shadow_txt(img, W // 2, 185, "VALUE", YELLOW, 5)
+    shadow_txt(img, W // 2, 92, "ANSWER", WHITE, 4)
+    shadow_txt(img, W // 2, 137, "vs", ORANGE, 2)
+    shadow_txt(img, W // 2, 182, "VALUE", YELLOW, 5)
+    # the logo is the start switch
     k = seg(t, 0.3, 0.7)
     pop = 1 + 0.12 * math.sin(k * math.pi)
-    logo(W * UP // 2, 507, int(290 * k * pop))
-    player(d, W // 2, GROUND_Y - abs(int(math.sin(t * 5) * 6)), t, running=False)
-    if int(t * 2.5) % 2 == 0:
-        shadow_txt(img, W // 2, 362, "PRESS START", WHITE, 2)
+    LW, LCX, LCY = 330, W * UP // 2, 510
+    logo(LCX, LCY, int(LW * k * pop), toggle_image(on))
+    sc = LW / LOGO.width
+    kx = LCX + (KX0 + (KX1 - KX0) * 0.55 + TRAVEL * on - LOGO.width / 2) * sc
+    ky = LCY + (100 - LOGO.height / 2) * sc
+    if t > 0.9:
+        g = ease_io(seg(t, 0.9, 1.7))
+        cx = 720 + (kx - 720) * g
+        cy = 760 + (ky - 760) * g
+        if t > T_SLIDE1 + 0.1:  # let go and drift off
+            r = ease_io(seg(t, T_SLIDE1 + 0.1, T_SLIDE1 + 0.8))
+            cx, cy = kx + 60 * r, ky + 90 * r
+        pressed = T_PRESS < t < T_SLIDE1 + 0.1
+        OVERLAYS.append(("cursor", int(cx), int(cy), 3 if not pressed else 2))
+        if T_PRESS < t < T_PRESS + 0.35:  # click sparks
+            ImageDraw.Draw(img)
+            for j in range(6):
+                a = j * math.pi / 3
+                r1, r2 = 14, 14 + 20 * seg(t, T_PRESS, T_PRESS + 0.35)
+                OVERLAYS.append(("spark", cx + math.cos(a) * r1, cy + math.sin(a) * r1,
+                                 cx + math.cos(a) * r2, cy + math.sin(a) * r2))
+    player(d, W // 2, GROUND_Y - abs(int(math.sin(t * (5 if on < 1 else 12)) * 6)), t,
+           running=on >= 1)
+    if on < 1:
+        if int(t * 2.5) % 2 == 0:
+            shadow_txt(img, W // 2, 362, "PUSH TO START", WHITE, 2)
+    else:
+        shadow_txt(img, W // 2, 362, "GAME START!", YELLOW, 2)
+        if t < T_SLIDE1 + 0.17:  # flash
+            d.rectangle((0, 0, W, H), fill=WHITE)
 
 def s_level1(img, d, t):
     scroll = t * 60  # treadmill: world moves, player goes nowhere
@@ -301,7 +387,7 @@ def s_end(img, d, t):
     if t > 3.0 and int(t * 2.5) % 2 == 0:
         txt(img, W // 2, 362, "▶ PLAY AGAIN", WHITE)
 
-SCENES = [(s_title, 3.0), (s_level1, 7.4), (s_level2, 6.8), (s_level3, 6.2), (s_end, 5.0)]
+SCENES = [(s_title, 3.6), (s_level1, 7.4), (s_level2, 6.8), (s_level3, 6.2), (s_end, 5.0)]
 
 frames = []
 for fn, dur in SCENES:
@@ -315,10 +401,16 @@ for fn, dur in SCENES:
             k = t / 0.25
             ImageDraw.Draw(img).rectangle((0, 0, W, int(H * (1 - k))), fill=DARK)
         big = img.resize((W * UP, H * UP), Image.NEAREST)
-        for (cx, cy, w) in OVERLAYS:
-            h = round(LOGO.height * w / LOGO.width)
-            lg = LOGO.resize((w, h), Image.LANCZOS)
-            big.paste(lg, (cx - w // 2, cy - h // 2), lg)
+        for ov in OVERLAYS:
+            if ov[0] == "img":
+                _, src, cx, cy, w = ov
+                h = round(src.height * w / src.width)
+                lg = src.resize((w, h), Image.LANCZOS)
+                big.paste(lg, (int(cx - w // 2), int(cy - h // 2)), lg)
+            elif ov[0] == "spark":
+                ImageDraw.Draw(big).line(ov[1:], fill=YELLOW, width=4)
+            elif ov[0] == "cursor":
+                draw_cursor(big, ov[1], ov[2], ov[3])
         frames.append(big)
 
 pal = [f.convert("P", palette=Image.ADAPTIVE, colors=96, dither=Image.Dither.NONE) for f in frames]
