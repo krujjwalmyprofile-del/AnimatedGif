@@ -108,10 +108,11 @@ def toggle_image(k):
     if k <= 0: return LOGO
     off = int(TRAVEL * k)
     im = TRACK.copy()
-    fill = Image.new("L", im.size, 0)
-    # fill trails the knob and reaches the very end of the pill once fully on (no grey sliver)
-    right = KX0 + off + KNOB.width - 24 + int(60 * k)
-    ImageDraw.Draw(fill).rectangle((0, 0, right, im.height), fill=255)
+    # black fill is a pill whose rounded end wraps the knob, so every frame looks like the "on" state
+    right = min(im.width, KX0 + off + KNOB.width + 22)
+    fill = _pill(im.size, (0, 0, right, im.height - 1), im.height / 2)
+    if k < 0.15:
+        fill = fill.point(lambda v: int(v * k / 0.15))
     im.paste(TRACK_ON, (0, 0), ImageChops.multiply(fill, LOGO.getchannel("A")))
     im.alpha_composite(KNOB_SHADOW, (KX0 + off, KY0))
     im.alpha_composite(KNOB, (KX0 + off, KY0))

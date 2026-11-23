@@ -292,12 +292,27 @@ def s_end(d, t):
         d.line(P(W / 2 - tw / 2 - 4, 283, W / 2 - tw / 2 - 4 + (tw + 8) * st, 283), fill=INK, width=int(2.5 * S))
     k2 = ease(seg(t, 1.5, 2.2))
     text(d, (W / 2, 348 + 10 * (1 - k2)), "More creating it.", font(DISPLAY, 62), fade(INK, k2), "mm")
+    # the switch arrives on, then a click slides it back off: the original logo, ready to play again
+    E_PRESS, E_S0, E_S1 = 3.75, 3.9, 4.55
     la = ease(seg(t, 2.3, 2.9))
-    logo_at(W / 2, 480 + 8 * (1 - la), 300, 1.0, la)
-    pa = ease(seg(t, 3.0, 3.5))
+    on = 1 - eio(seg(t, E_S0, E_S1))
+    LW, LCX, LCY = 300, W / 2, 480 + 8 * (1 - la)
+    logo_at(LCX, LCY, LW, on, la)
+    sc = LW / LOGO.width
+    kx = LCX + (KX0 + (KX1 - KX0) * 0.62 + TRAVEL * on - LOGO.width / 2) * sc
+    ky = LCY + (112 - LOGO.height / 2) * sc
+    if t > 2.95:
+        g = eio(seg(t, 2.95, 3.7))
+        cx, cy = lerp(660, kx, g), lerp(720, ky, g)
+        if t > E_S1 + 0.15:
+            r = eio(seg(t, E_S1 + 0.15, E_S1 + 0.9))
+            cx, cy = kx + 70 * r, ky + 120 * r
+        pressed = E_PRESS < t < E_S1 + 0.15
+        OVER.append(("cursor", cx, cy, 0.9 if pressed else 1.0, 1 - seg(t, E_S1 + 0.6, E_S1 + 0.9)))
+    pa = ease(seg(t, E_S1, E_S1 + 0.5))
     spaced(d, (W / 2, 590), "PLAY AGAIN", font("Inter-SemiBold", 12), fade(MUTED, pa), 3, "m")
 
-SCENES = [(s_title, 4.0), (s_level1, 7.2), (s_level2, 6.6), (s_level3, 6.2), (s_end, 5.2)]
+SCENES = [(s_title, 4.0), (s_level1, 7.2), (s_level2, 6.6), (s_level3, 6.2), (s_end, 6.4)]
 XF = 0.35
 
 def render():
@@ -336,7 +351,7 @@ def render():
 
 if __name__ == "__main__":
     frames = render()
-    pal = [f.quantize(colors=40, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in frames]
+    pal = [f.quantize(colors=36, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in frames]
     durs = [round(1000 / FPS)] * len(pal)
     durs[-1] = 1500
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "answer-vs-value-chess.gif")
