@@ -90,36 +90,32 @@ def chip(d, cx, cy, s, a, f=None, pad=18):
 PX = 440                           # right panel x
 
 # ---------------------------------------------------------------- title
-T_PRESS, T_S0, T_S1 = 2.15, 2.3, 3.0
+T_PRESS, T_S0, T_S1 = 1.1, 1.25, 1.9
 
 def s_title(d, t):
-    k = ease(seg(t, 0.1, 0.8))
-    spaced(d, (W / 2, 196 + 8 * (1 - k)), "A GAME OF CHESS", font("Inter-SemiBold", 12), fade(MUTED, k), 3, "m")
-    k = ease(seg(t, 0.25, 0.95))
-    text(d, (W / 2, 262 + 12 * (1 - k)), "Answer vs. Value", font(DISPLAY, 66), fade(INK, k), "mm")
-    # two kings facing off, quietly
-    ka = ease(seg(t, 0.5, 1.1))
-    piece(d, "K", W / 2 - 318, 266, ka); piece(d, "k", W / 2 + 318, 266, ka)
+    """Frame 0 is the fully composed title: cursor already resting on the switch."""
+    spaced(d, (W / 2, 196), "A GAME OF CHESS", font("Inter-SemiBold", 12), MUTED, 3, "m")
+    text(d, (W / 2, 262), "Answer vs. Value", font(DISPLAY, 66), INK, "mm")
+    piece(d, "K", W / 2 - 318, 266); piece(d, "k", W / 2 + 318, 266)
     on = eio(seg(t, T_S0, T_S1))
-    la = ease(seg(t, 0.6, 1.1))
-    LW, LCX, LCY = 360, W / 2, 432 + 8 * (1 - la)
-    logo_at(LCX, LCY, LW * (0.97 + 0.03 * la), on, la)
-    ca = ease(seg(t, 1.0, 1.4)) * (1 - ease(seg(t, T_S0, T_S0 + 0.25)))
-    spaced(d, (W / 2, 560), "PUSH TO START", font("Inter-SemiBold", 12),
-           fade(INK, ca * (0.55 + 0.45 * math.sin(t * 4) ** 2)), 3, "m")
-    cb = ease(seg(t, T_S1 - 0.05, T_S1 + 0.4))
-    spaced(d, (W / 2, 560), "WHITE TO MOVE", font("Inter-SemiBold", 12), fade(INK, cb), 3, "m")
+    LW, LCX, LCY = 360, W / 2, 432
+    logo_at(LCX, LCY, LW, on, 1.0)
+    # solid labels (a pulsing grey breaks up under GIF quantisation)
+    ca = 1 - ease(seg(t, T_S0, T_S0 + 0.2))
+    if ca > 0.02:
+        spaced(d, (W / 2, 560), "PUSH TO START", font("Inter-SemiBold", 12), fade(INK, ca), 3, "m")
+    cb = ease(seg(t, T_S1 - 0.1, T_S1 + 0.25))
+    if cb > 0.02:
+        spaced(d, (W / 2, 560), "WHITE TO MOVE", font("Inter-SemiBold", 12), fade(INK, cb), 3, "m")
     sc = LW / LOGO.width
     kx = LCX + (KX0 + (KX1 - KX0) * 0.62 + TRAVEL * on - LOGO.width / 2) * sc
     ky = LCY + (112 - LOGO.height / 2) * sc
-    if t > 1.2:
-        g = eio(seg(t, 1.2, 2.05))
-        cx, cy = lerp(640, kx, g), lerp(700, ky, g)
-        if t > T_S1 + 0.15:
-            r = eio(seg(t, T_S1 + 0.15, T_S1 + 0.9))
-            cx, cy = kx + 70 * r, ky + 120 * r
-        pressed = T_PRESS < t < T_S1 + 0.15
-        OVER.append(("cursor", cx, cy, 0.9 if pressed else 1.0, 1 - seg(t, T_S1 + 0.6, T_S1 + 0.9)))
+    cx, cy = kx, ky
+    if t > T_S1 + 0.15:
+        r = eio(seg(t, T_S1 + 0.15, T_S1 + 0.9))
+        cx, cy = kx + 70 * r, ky + 120 * r
+    pressed = T_PRESS < t < T_S1 + 0.15
+    OVER.append(("cursor", cx, cy, 0.9 if pressed else 1.0, 1 - seg(t, T_S1 + 0.6, T_S1 + 0.9)))
 
 # ---------------------------------------------------------------- level 1: draw by repetition
 Q1 = [("How do we get leads?", "Nf3"), ("What should we build?", "Ng1"),
@@ -312,7 +308,7 @@ def s_end(d, t):
     pa = ease(seg(t, E_S1, E_S1 + 0.5))
     spaced(d, (W / 2, 590), "PLAY AGAIN", font("Inter-SemiBold", 12), fade(MUTED, pa), 3, "m")
 
-SCENES = [(s_title, 4.0), (s_level1, 7.2), (s_level2, 6.6), (s_level3, 6.2), (s_end, 6.4)]
+SCENES = [(s_title, 3.3), (s_level1, 7.2), (s_level2, 6.6), (s_level3, 6.2), (s_end, 6.4)]
 XF = 0.35
 
 def render():
